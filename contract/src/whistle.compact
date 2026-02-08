@@ -1,0 +1,89 @@
+pragma language_version >= 0.20;
+
+import CompactStandardLibrary;
+
+/**
+ * MidnightWhistle — Anonymous Whistleblower Verification
+ *
+ * An employee commits their organizational membership on-chain.
+ * They can then submit anonymous reports that are cryptographically
+ * verified as coming from a real insider — without ever revealing
+ * their identity. Investigators verify report authenticity, severity,
+ * and financial impact through Zero-Knowledge proofs.
+ *
+ * Ledger stores only commitments (hashes). Raw data never touches the chain.
+ */
+
+/** Hash of the whistleblower's organizational membership secret. */
+export ledger membership_commitment: Bytes<32>;
+
+/** Hash of the latest submitted report. */
+export ledger report_commitment: Bytes<32>;
+
+/**
+ * Step 1: Register Membership
+ * Anchors the organizational membership commitment on-chain.
+ * Only the whistleblower knows the secret that produced this hash.
+ */
+export circuit register_membership(commitment: Bytes<32>, wallet_address: Bytes<32>): [] {
+    membership_commitment = disclose(commitment);
+}
+
+/**
+ * Step 2: Prove Membership
+ * Proves the caller is a legitimate member of the organization
+ * without revealing which member they are.
+ */
+export circuit prove_membership(secret: Bytes<32>, wallet_address: Bytes<32>): [] {
+    assert(membership_commitment == persistentHash<Bytes<32>>(secret), "Membership verification failed: Secret does not match commitment");
+}
+
+/**
+ * Step 3: Submit Anonymous Report
+ * Submits a report hash on-chain after proving organizational membership.
+ * The report content stays off-chain; only the commitment is stored.
+ */
+export circuit submit_report(report_hash: Bytes<32>, secret: Bytes<32>, wallet_address: Bytes<32>): [] {
+    assert(membership_commitment == persistentHash<Bytes<32>>(secret), "Identity mismatch: Cannot verify organizational membership");
+    report_commitment = disclose(report_hash);
+}
+
+/**
+ * Step 4: Prove Severity Level
+ * Proves the report's severity rating meets a minimum threshold
+ * without revealing the actual severity score (1-10 scale).
+ */
+export circuit prove_severity(min_severity: Uint<16>, actual_severity: Uint<32>, secret: Bytes<32>, wallet_address: Bytes<32>): [] {
+    assert(membership_commitment == persistentHash<Bytes<32>>(secret), "Identity mismatch");
+    const min32 = min_severity as Uint<32>;
+    assert(actual_severity >= min32, "Severity Threshold Not Met: Report severity is below the required level");
+}
+
+/**
+ * Step 5: Prove Financial Impact
+ * Proves the financial damage exceeds a minimum amount (in thousands)
+ * without revealing the exact figure. Useful for prioritizing investigations.
+ */
+export circuit prove_financial_impact(min_amount: Uint<16>, actual_amount: Uint<32>, secret: Bytes<32>, wallet_address: Bytes<32>): [] {
+    assert(membership_commitment == persistentHash<Bytes<32>>(secret), "Identity mismatch");
+    const min32 = min_amount as Uint<32>;
+    assert(actual_amount >= min32, "Financial Impact Threshold Not Met: Reported amount is below the required minimum");
+}
+
+/**
+ * Step 6: Prove Witness Count
+ * Proves the number of corroborating witnesses meets a minimum
+ * without revealing the exact count.
+ */
+export circuit prove_witness_count(min_witnesses: Uint<16>, actual_witnesses: Uint<16>, secret: Bytes<32>, wallet_address: Bytes<32>): [] {
+    assert(membership_commitment == persistentHash<Bytes<32>>(secret), "Identity mismatch");
+    assert(actual_witnesses >= min_witnesses, "Witness Requirement Not Met: Not enough corroborating witnesses");
+}
+
+/**
+ * Step 7: Verify Report
+ * Public verification — anyone can check if a report hash exists on-chain.
+ */
+export circuit verify_report(claimed_hash: Bytes<32>): [] {
+    assert(report_commitment == claimed_hash, "Verification Failed: Report hash does not match on-chain commitment");
+}
